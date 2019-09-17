@@ -5,7 +5,8 @@ version := "1.0-SNAPSHOT"
 
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
 val akkaVersion: String = sys.props.getOrElse("akka.version", "2.6.0-M7")
-val akkaManagementVersion: String = "1.0.3"
+
+val akkaPersistenceJdbc = "3.5.2"
 
 scalaVersion := "2.13.0"
 
@@ -15,10 +16,10 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-persistence-typed" % akkaVersion,
   "com.typesafe.akka" %% "akka-cluster-sharding-typed" % akkaVersion,
 
+  "com.typesafe.akka" %% "akka-persistence-query" % akkaVersion,
+  "com.github.dnvriend" %% "akka-persistence-jdbc" % akkaPersistenceJdbc,
+
+ "org.postgresql" % "postgresql" % "42.2.5",
+
 )
 
-// Adds additional packages into Twirl
-//TwirlKeys.templateImports += "com.example.controllers._"
-
-// Adds additional packages into conf/routes
-// play.sbt.routes.RoutesKeys.routesImport += "com.example.binders._"
