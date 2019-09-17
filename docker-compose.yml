@@ -1,0 +1,9 @@
+postgres:
+  image: postgres:latest
+  container_name: play_scala_seed_postgres
+  environment:
+    - "TZ=Europe/Amsterdam"
+    - "POSTGRES_USER=play_scala_seed"
+    - "POSTGRES_PASSWORD=play_scala_seed"
+  ports:
+    - "5432:5432"  # credentials (play_scala_seed:play_scala_seed)

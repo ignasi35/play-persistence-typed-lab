@@ -19,6 +19,8 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-persistence-query" % akkaVersion,
   "com.github.dnvriend" %% "akka-persistence-jdbc" % akkaPersistenceJdbc,
 
+  "com.typesafe.akka" %% "akka-serialization-jackson" % akkaVersion,
+
  "org.postgresql" % "postgresql" % "42.2.5",
 
 )

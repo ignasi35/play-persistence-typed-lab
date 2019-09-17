@@ -4,7 +4,7 @@ import akka.actor.ActorSystem
 import akka.cluster.sharding.typed.scaladsl.EntityTypeKey
 import akka.cluster.sharding.typed.scaladsl.ClusterSharding
 import akka.cluster.sharding.typed.scaladsl.EntityRef
-import akka.cluster.sharding.typed.scaladsl.{ Entity => ShardedEntity }
+import akka.cluster.sharding.typed.scaladsl.{Entity => ShardedEntity}
 import akka.cluster.Cluster
 import akka.util.Timeout
 import javax.inject._
@@ -13,10 +13,12 @@ import persistence.GetGreetings
 import persistence.GreetingsCommand
 import persistence.GreetingsPersistentEntity
 import persistence.Rejected
+import persistence.UpdateGreetings
 import play.api.libs.json.JsValue
 import play.api.mvc._
 
 import scala.concurrent.ExecutionContext
+import scala.concurrent.Future
 import scala.concurrent.duration._
 
 /**
@@ -46,22 +48,29 @@ class HomeController @Inject()(
   /**
     * $ curl -X POST -H "Content-Type: application/json" -d '{"message": "Hi"}'  http://localhost:9000/api/hello/Alice
     */
-  def updateGreeting(id: String) = Action { request: Request[AnyContent] =>
-    val body: AnyContent = request.body
-    val jsonBody: Option[JsValue] = body.asJson
-    jsonBody
-      .map { json =>
-        Ok("Got: " + (json \ "message").as[String])
-      }
-      .getOrElse {
-        BadRequest("Expecting application/json request body")
-      }
+  def updateGreeting(id: String) = Action.async {
+    implicit request: Request[AnyContent] =>
+      val body: AnyContent = request.body
+      val jsonBody: Option[JsValue] = body.asJson
+
+      jsonBody
+        .map { json =>
+          val msg = (json \ "message").as[String]
+          (pp.forId(id) ? UpdateGreetings(msg)).map {
+            case Confirmed(message) => Ok(s"Udapted to $message!")
+            case Rejected(cause)    => BadRequest(s"$cause")
+          }
+        }
+        .getOrElse {
+          Future
+            .successful(BadRequest("Expecting application/json request body"))
+        }
   }
 }
 @Singleton
-class PersistenceProvisions @Inject()(
-  actorSystem: ActorSystem
-)(implicit executionContext: ExecutionContext) {
+class PersistenceProvisions @Inject()(actorSystem: ActorSystem)(
+  implicit executionContext: ExecutionContext
+) {
   import akka.actor.typed.scaladsl.adapter._
 
   private val typedSystem: akka.actor.typed.ActorSystem[_] = actorSystem.toTyped
