@@ -1,23 +1,46 @@
 package controllers
 
+import akka.actor.ActorSystem
+import akka.actor.typed
+import akka.cluster.sharding.typed.scaladsl.EntityTypeKey
+import akka.cluster.sharding.typed.scaladsl.ClusterSharding
+import akka.cluster.sharding.typed.scaladsl.EntityRef
+import akka.cluster.sharding.typed.scaladsl.{ Entity => ShardedEntity }
+import akka.util.Timeout
 import javax.inject._
-import play.api._
+import persistence.Confirmed
+import persistence.GetGreetings
+import persistence.GreetingsCommand
+import persistence.GreetingsPersistentEntity
+import persistence.Rejected
 import play.api.libs.json.JsValue
 import play.api.mvc._
+
+import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
 
 /**
   * This controller creates an `Action` to handle HTTP requests to the
   * application's home page.
   */
 @Singleton
-class HomeController @Inject()(cc: ControllerComponents)
+class HomeController @Inject()(
+  pp: PersistenceProvisions,
+  cc: ControllerComponents
+)(implicit ctx: ExecutionContext)
     extends AbstractController(cc) {
+
+  private implicit val askTimeout: Timeout = Timeout(5.seconds)
 
   /**
     * $ curl http://localhost:9000/api/hello/Alice
     */
-  def index(id: String) = Action { implicit request: Request[AnyContent] =>
-    Ok(s"Hello, $id!")
+  def index(id: String) = Action.async {
+    implicit request: Request[AnyContent] =>
+      (pp.forId(id) ? GetGreetings).map {
+        case Confirmed(message) => Ok(s"$message, $id!")
+        case Rejected(cause)    => BadRequest(s"$cause")
+      }
   }
 
   /**
@@ -34,4 +57,21 @@ class HomeController @Inject()(cc: ControllerComponents)
         BadRequest("Expecting application/json request body")
       }
   }
+}
+@Singleton
+class PersistenceProvisions @Inject()(actorSystem: ActorSystem) {
+  import akka.actor.typed.scaladsl.adapter._
+
+  private val tpd: akka.actor.typed.ActorSystem[_] = actorSystem.toTyped
+  private val sharding = ClusterSharding(tpd)
+
+  private val typeKey =
+    EntityTypeKey[GreetingsCommand]("greetings-sharded-entity")
+  sharding.init(ShardedEntity(typeKey, GreetingsPersistentEntity.behavior))
+
+  def forId(persistentEntityId: String): EntityRef[GreetingsCommand] = {
+    val peId = typeKey.persistenceIdFrom(persistentEntityId)
+    sharding.entityRefFor(typeKey, peId.id)
+  }
+
 }

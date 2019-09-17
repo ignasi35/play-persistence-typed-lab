@@ -4,7 +4,7 @@ organization := "com.example"
 version := "1.0-SNAPSHOT"
 
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
-val akkaVersion: String = sys.props.getOrElse("akka.version", "2.6.0-M5")
+val akkaVersion: String = sys.props.getOrElse("akka.version", "2.6.0-M7")
 
 scalaVersion := "2.13.0"
 
