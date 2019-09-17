@@ -19,7 +19,8 @@ object GreetingsPersistentEntity {
       .withEnforcedReplies[GreetingsCommand, GreetingsChanged, GreetingsState](
         persistenceId = PersistenceId("abc"),
         emptyState = GreetingsState.empty,
-        commandHandler = (state, command) => GreetingsState.applyCommand(state, command),
+        commandHandler =
+          (state, command) => GreetingsState.applyCommand(state, command),
         eventHandler = (state, evt) => GreetingsState.applyEvent(state, evt)
       )
 
@@ -43,16 +44,14 @@ final object GreetingsState {
     }
   }
 
-  def applyEvent(state: GreetingsState,
-                  evt: GreetingsChanged): GreetingsState =
+  def applyEvent(state: GreetingsState, evt: GreetingsChanged): GreetingsState =
     GreetingsState(evt.message)
 }
-final case class GreetingsState(message: String) extends JacksonSerializable {
+final case class GreetingsState(message: String) extends JacksonSerializable
 
-
-}
-
-sealed trait GreetingsCommand extends ExpectingReply[GreetingsCommandReply] with JacksonSerializable
+sealed trait GreetingsCommand
+    extends ExpectingReply[GreetingsCommandReply]
+    with JacksonSerializable
 final case class UpdateGreetings(message: String)(
   override val replyTo: ActorRef[GreetingsCommandReply]
 ) extends GreetingsCommand
@@ -65,6 +64,5 @@ final case class Confirmed(message: String) extends GreetingsCommandReply
 final case class Rejected(cause: String) extends GreetingsCommandReply
 
 final case class GreetingsChanged(message: String) extends JacksonSerializable
-
 
 trait JacksonSerializable

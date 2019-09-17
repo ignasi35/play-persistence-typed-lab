@@ -4,7 +4,7 @@ import akka.actor.ActorSystem
 import akka.cluster.sharding.typed.scaladsl.EntityTypeKey
 import akka.cluster.sharding.typed.scaladsl.ClusterSharding
 import akka.cluster.sharding.typed.scaladsl.EntityRef
-import akka.cluster.sharding.typed.scaladsl.{Entity => ShardedEntity}
+import akka.cluster.sharding.typed.scaladsl.{ Entity => ShardedEntity }
 import akka.cluster.Cluster
 import akka.util.Timeout
 import javax.inject._
