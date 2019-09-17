@@ -4,14 +4,20 @@ import akka.actor.ActorSystem
 import akka.cluster.sharding.typed.scaladsl.EntityTypeKey
 import akka.cluster.sharding.typed.scaladsl.ClusterSharding
 import akka.cluster.sharding.typed.scaladsl.EntityRef
-import akka.cluster.sharding.typed.scaladsl.{ Entity => ShardedEntity }
+import akka.cluster.sharding.typed.scaladsl.{Entity => ShardedEntity}
 import akka.cluster.Cluster
+import akka.cluster.sharding.typed.scaladsl.EntityContext
+import akka.cluster.sharding.typed.scaladsl.EventSourcedEntity
+import akka.persistence.typed.PersistenceId
+import akka.persistence.typed.scaladsl.EventSourcedBehavior
 import akka.util.Timeout
 import javax.inject._
 import persistence.Confirmed
 import persistence.GetGreetings
+import persistence.GreetingsChanged
 import persistence.GreetingsCommand
 import persistence.GreetingsPersistentEntity
+import persistence.GreetingsState
 import persistence.Rejected
 import persistence.UpdateGreetings
 import play.api.libs.json.JsValue
@@ -71,21 +77,45 @@ class HomeController @Inject()(
 class PersistenceProvisions @Inject()(actorSystem: ActorSystem)(
   implicit executionContext: ExecutionContext
 ) {
-  import akka.actor.typed.scaladsl.adapter._
 
+  // MACHINERY - Should be handled by Play
+  import akka.actor.typed.scaladsl.adapter._
   private val typedSystem: akka.actor.typed.ActorSystem[_] = actorSystem.toTyped
   private val sharding = ClusterSharding(typedSystem)
-
   private val cluster: Cluster = Cluster(actorSystem)
   cluster.join(cluster.selfAddress)
 
-  private val typeKey =
-    EntityTypeKey[GreetingsCommand]("greetings-sharded-entity")
-  sharding.init(ShardedEntity(typeKey, GreetingsPersistentEntity.behavior))
+  // Build the Persistence Behavior
+  // I'm calling this `journalName` but it could be `journalPrefix` or `journalNamespace`or ...
+  private val journalName = "greetings"
+  private val pe = new GreetingsPersistentEntity(journalName)
 
-  def forId(persistentEntityId: String): EntityRef[GreetingsCommand] = {
-    val peId = typeKey.persistenceIdFrom(persistentEntityId)
-    sharding.entityRefFor(typeKey, peId.id)
+
+
+  // this code helps adapt sharding types to Persistence Types
+  def forId(persistentEntityId: String): EntityRef[GreetingsCommand] =
+    sharding.entityRefFor(
+      shardingTypeKey,
+      // prepares a plain persistenceId into a entityId  -- needs some more work
+      pe.serializeArguments(persistentEntityId)
+    )
+  // undoes the entityId back into a PersistenceId -- needs some more work
+  private val adapt: EntityContext => PersistenceId = entityCtx =>{
+    pe.persistenceIdFrom(pe.deserializeArguments(entityCtx.entityId))
   }
+  private type CreateShardedBehavior =
+    EntityContext => EventSourcedBehavior[GreetingsCommand,
+                                          GreetingsChanged,
+                                          GreetingsState]
+  private val createBehavior: CreateShardedBehavior = entityCtx =>
+    pe.behavior(adapt(entityCtx))
+
+
+  // Shard the Behavior build above
+  private val shardingName = "greetings-sharded-entity"
+  private val shardingTypeKey: EntityTypeKey[GreetingsCommand] =
+    EntityTypeKey[GreetingsCommand](shardingName)
+
+  sharding.init(ShardedEntity(shardingTypeKey, createBehavior))
 
 }
