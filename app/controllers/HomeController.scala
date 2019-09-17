@@ -1,11 +1,11 @@
 package controllers
 
 import akka.actor.ActorSystem
-import akka.actor.typed
 import akka.cluster.sharding.typed.scaladsl.EntityTypeKey
 import akka.cluster.sharding.typed.scaladsl.ClusterSharding
 import akka.cluster.sharding.typed.scaladsl.EntityRef
 import akka.cluster.sharding.typed.scaladsl.{ Entity => ShardedEntity }
+import akka.cluster.Cluster
 import akka.util.Timeout
 import javax.inject._
 import persistence.Confirmed
@@ -59,11 +59,16 @@ class HomeController @Inject()(
   }
 }
 @Singleton
-class PersistenceProvisions @Inject()(actorSystem: ActorSystem) {
+class PersistenceProvisions @Inject()(
+  actorSystem: ActorSystem
+)(implicit executionContext: ExecutionContext) {
   import akka.actor.typed.scaladsl.adapter._
 
-  private val tpd: akka.actor.typed.ActorSystem[_] = actorSystem.toTyped
-  private val sharding = ClusterSharding(tpd)
+  private val typedSystem: akka.actor.typed.ActorSystem[_] = actorSystem.toTyped
+  private val sharding = ClusterSharding(typedSystem)
+
+  private val cluster: Cluster = Cluster(actorSystem)
+  cluster.join(cluster.selfAddress)
 
   private val typeKey =
     EntityTypeKey[GreetingsCommand]("greetings-sharded-entity")
