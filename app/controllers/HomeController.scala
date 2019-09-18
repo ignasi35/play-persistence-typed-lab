@@ -1,11 +1,13 @@
 package controllers
 
 import akka.actor.ActorSystem
+import akka.actor.typed.Behavior
 import akka.cluster.sharding.typed.scaladsl.EntityTypeKey
 import akka.cluster.sharding.typed.scaladsl.ClusterSharding
 import akka.cluster.sharding.typed.scaladsl.EntityRef
 import akka.cluster.sharding.typed.scaladsl.{Entity => ShardedEntity}
 import akka.cluster.Cluster
+import akka.cluster.sharding.typed.scaladsl.EntityContext
 import akka.cluster.sharding.typed.scaladsl.EntityContext
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.scaladsl.EventSourcedBehavior
@@ -111,8 +113,7 @@ abstract class PlayPersistenceProvisions[Cmd: ClassTag, Evt, St](
     EntityTypeKey[Cmd](shardingName)
 
   // This helps hide the fact that the Behavior is sharded
-  private val createBehavior
-    : EntityContext => EventSourcedBehavior[Cmd, Evt, St] = entityCtx => {
+  protected val createBehavior: EntityContext => Behavior[Cmd] = entityCtx => {
     val id = adaptFromSharding(entityCtx)
     createPersistentBehavior(id)
   }
@@ -145,6 +146,12 @@ class PersistenceProvisions @Inject()(actorSystem: ActorSystem)(
         .behavior(peid)
         .withTagger(event => Set.empty[String] + byEntityTagger(peid))
   }
+
+  protected val createBehavior: EntityContext => Behavior[GreetingsCommand] =
+    entityCtx => {
+      // wrap the behavior
+      super.createBehavior(entityCtx)
+    }
 
   // tagging concerns
   protected lazy val taggerPrefix = "greetings"
