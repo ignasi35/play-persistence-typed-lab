@@ -4,11 +4,9 @@ import akka.actor.ActorSystem
 import akka.cluster.sharding.typed.scaladsl.EntityTypeKey
 import akka.cluster.sharding.typed.scaladsl.ClusterSharding
 import akka.cluster.sharding.typed.scaladsl.EntityRef
-import akka.cluster.sharding.typed.scaladsl.{Entity => ShardedEntity}
+import akka.cluster.sharding.typed.scaladsl.{ Entity => ShardedEntity }
 import akka.cluster.Cluster
 import akka.cluster.sharding.typed.scaladsl.EntityContext
-import akka.cluster.sharding.typed.scaladsl.EventSourcedEntity
-import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.scaladsl.EventSourcedBehavior
 import akka.util.Timeout
 import javax.inject._
@@ -79,7 +77,7 @@ abstract class PlayPersistenceProvisions[Cmd: ClassTag, Evt, St](
   actorSystem: ActorSystem
 )(implicit executionContext: ExecutionContext) {
 
-  // purposedly not using `PersistenceId since that's already used by Akka Persistence
+  // purposedly not using `PersistenceId` since that's already used by Akka Persistence
   type PEId = String
   type ShardedInstanceId = String
 

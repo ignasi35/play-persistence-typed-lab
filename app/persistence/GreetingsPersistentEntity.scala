@@ -10,17 +10,19 @@ import persistence.akkalibs.PersistenceIds
 
 class GreetingsPersistentEntity(val journalName: String) {
 
-  def serializeArguments(persistenceId: String):String = s"shard-name-$journalName-$persistenceId"
-  def deserializeArguments(entityId: String):String = entityId.split("-").drop(3).mkString("-")
+  def serializeArguments(persistenceId: String): String = persistenceId
+  def deserializeArguments(entityId: String): String = entityId
 
   // this is sharding agnostic
   def persistenceIdFrom(persistentEntityId: String): PersistenceId =
     PersistenceIds.asLagomScala(journalName, persistentEntityId)
 
   // this is sharding agnostic
-  def behavior(persistentId: PersistenceId): EventSourcedBehavior[GreetingsCommand,
-                                                           GreetingsChanged,
-                                                           GreetingsState] = {
+  def behavior(persistentId: PersistenceId): EventSourcedBehavior[
+    GreetingsCommand,
+    GreetingsChanged,
+    GreetingsState
+  ] = {
     EventSourcedBehavior.withEnforcedReplies(
       persistenceId = persistentId,
       emptyState = GreetingsState.empty,
@@ -30,8 +32,6 @@ class GreetingsPersistentEntity(val journalName: String) {
     )
   }
 }
-
-
 
 final object GreetingsState {
   val empty = GreetingsState("Hello, ")
