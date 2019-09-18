@@ -26,6 +26,7 @@ import play.api.mvc._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.reflect.ClassTag
 
 /**
   * This controller creates an `Action` to handle HTTP requests to the
@@ -74,9 +75,9 @@ class HomeController @Inject()(
   }
 }
 
-abstract class PlayPersistenceProvisions[Cmd, Evt, St](actorSystem: ActorSystem)(
-  implicit executionContext: ExecutionContext
-) {
+abstract class PlayPersistenceProvisions[Cmd: ClassTag, Evt, St](
+  actorSystem: ActorSystem
+)(implicit executionContext: ExecutionContext) {
 
   // purposedly not using `PersistenceId since that's already used by Akka Persistence
   type PEId = String
@@ -89,14 +90,13 @@ abstract class PlayPersistenceProvisions[Cmd, Evt, St](actorSystem: ActorSystem)
   private val cluster: Cluster = Cluster(actorSystem)
   cluster.join(cluster.selfAddress)
 
-  protected val journalName: String
-  protected val shardingName: String
+  protected def journalName: String
+  protected def shardingName: String
 
-  protected val adaptToSharding: PEId => ShardedInstanceId
-  protected val adaptFromSharding: ShardedInstanceId => PEId
-  protected val createPersistentBehavior: PEId => EventSourcedBehavior[Cmd,
-                                                                       Evt,
-                                                                       St]
+  protected def adaptToSharding: PEId => ShardedInstanceId
+  protected def adaptFromSharding: ShardedInstanceId => PEId
+  protected def createPersistentBehavior
+    : PEId => EventSourcedBehavior[Cmd, Evt, St]
 
   // this code helps adapt sharding types to Persistence Types
   def shardedRefFor(persistentEntityId: PEId): EntityRef[Cmd] =
@@ -129,17 +129,34 @@ class PersistenceProvisions @Inject()(actorSystem: ActorSystem)(
       GreetingsState
     ](actorSystem) {
 
-  protected val journalName = "greetings"
-  protected val shardingName = "greetings-sharded-entity"
+  protected lazy val journalName = "greetings"
+  protected lazy val shardingName = "greetings-sharded-entity"
 
   private val pe = new GreetingsPersistentEntity(journalName)
 
   // The user-provided PEId is used as a sharding Id. This sharding Id is
-  val adaptToSharding: PEId => ShardedInstanceId = pe.serializeArguments
-  val adaptFromSharding: ShardedInstanceId => PEId = pe.deserializeArguments
+  lazy val adaptToSharding: PEId => ShardedInstanceId = pe.serializeArguments
+  lazy val adaptFromSharding: ShardedInstanceId => PEId =
+    pe.deserializeArguments
 
-  protected val createPersistentBehavior: PEId => EventSourcedBehavior[GreetingsCommand, GreetingsChanged, GreetingsState] = {
-     peid:PEId => pe.behavior(pe.persistenceIdFrom(peid))
+  private val byEntityTagger: PEId => String =
+    lagomProjectionsTagger(journalName, 8)
+
+  protected val createPersistentBehavior
+    : PEId => EventSourcedBehavior[GreetingsCommand,
+                                   GreetingsChanged,
+                                   GreetingsState] = { peid: PEId =>
+    pe.behavior(pe.persistenceIdFrom(peid))
+      .withTagger(event => Set.empty[String] + byEntityTagger(peid))
+  }
+
+  // A Tagger that given a PEId produces a sharded tag. This is necessary to
+  // build projections over this journal
+  private def lagomProjectionsTagger(journalName: String,
+                                     numOfShards: Int): PEId => String = {
+    persistenceId =>
+      val shardNum = Math.abs(persistenceId.hashCode % numOfShards)
+      s"$journalName$shardNum"
   }
 
 }

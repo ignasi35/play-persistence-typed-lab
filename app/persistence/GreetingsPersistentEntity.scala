@@ -22,7 +22,7 @@ class GreetingsPersistentEntity(val journalName: String) {
                                                            GreetingsChanged,
                                                            GreetingsState] = {
     EventSourcedBehavior.withEnforcedReplies(
-      persistenceId = persistenceIdFrom(persistentId),
+      persistenceId = persistentId,
       emptyState = GreetingsState.empty,
       commandHandler =
         (state, command) => GreetingsState.applyCommand(state, command),
