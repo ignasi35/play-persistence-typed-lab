@@ -6,18 +6,8 @@ import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.scaladsl.Effect
 import akka.persistence.typed.scaladsl.EventSourcedBehavior
 import akka.persistence.typed.scaladsl.ReplyEffect
-import persistence.akkalibs.PersistenceIds
 
-class GreetingsPersistentEntity(val journalName: String) {
-
-  def serializeArguments(persistenceId: String): String = persistenceId
-  def deserializeArguments(entityId: String): String = entityId
-
-  // this is sharding agnostic
-  def persistenceIdFrom(persistentEntityId: String): PersistenceId =
-    PersistenceIds.asLagomScala(journalName, persistentEntityId)
-
-  // this is sharding agnostic
+object GreetingsPersistentEntity {
   def behavior(persistentId: PersistenceId): EventSourcedBehavior[
     GreetingsCommand,
     GreetingsChanged,
@@ -37,8 +27,8 @@ final object GreetingsState {
   val empty = GreetingsState("Hello, ")
 
   def applyCommand(
-    state: GreetingsState,
-    cmd: GreetingsCommand
+      state: GreetingsState,
+      cmd: GreetingsCommand
   ): ReplyEffect[GreetingsChanged, GreetingsState] = {
     cmd match {
       case gg: GetGreetings =>
@@ -61,10 +51,10 @@ sealed trait GreetingsCommand
     extends ExpectingReply[GreetingsCommandReply]
     with JacksonSerializable
 final case class UpdateGreetings(message: String)(
-  override val replyTo: ActorRef[GreetingsCommandReply]
+    override val replyTo: ActorRef[GreetingsCommandReply]
 ) extends GreetingsCommand
 final case class GetGreetings(
-  override val replyTo: ActorRef[GreetingsCommandReply]
+    override val replyTo: ActorRef[GreetingsCommandReply]
 ) extends GreetingsCommand
 
 sealed trait GreetingsCommandReply extends JacksonSerializable

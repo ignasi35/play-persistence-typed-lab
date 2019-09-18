@@ -4,12 +4,15 @@ import akka.actor.ActorSystem
 import akka.cluster.sharding.typed.scaladsl.EntityTypeKey
 import akka.cluster.sharding.typed.scaladsl.ClusterSharding
 import akka.cluster.sharding.typed.scaladsl.EntityRef
-import akka.cluster.sharding.typed.scaladsl.{ Entity => ShardedEntity }
+import akka.cluster.sharding.typed.scaladsl.{Entity => ShardedEntity}
 import akka.cluster.Cluster
 import akka.cluster.sharding.typed.scaladsl.EntityContext
+import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.scaladsl.EventSourcedBehavior
 import akka.util.Timeout
 import javax.inject._
+import libs.PersistenceIds
+import libs.ProjectionTaggers
 import persistence.Confirmed
 import persistence.GetGreetings
 import persistence.GreetingsChanged
@@ -32,8 +35,8 @@ import scala.reflect.ClassTag
   */
 @Singleton
 class HomeController @Inject()(
-  pp: PersistenceProvisions,
-  cc: ControllerComponents
+    pp: PersistenceProvisions,
+    cc: ControllerComponents
 )(implicit ctx: ExecutionContext)
     extends AbstractController(cc) {
 
@@ -74,44 +77,43 @@ class HomeController @Inject()(
 }
 
 abstract class PlayPersistenceProvisions[Cmd: ClassTag, Evt, St](
-  actorSystem: ActorSystem
+    actorSystem: ActorSystem
 )(implicit executionContext: ExecutionContext) {
 
-  // purposedly not using `PersistenceId` since that's already used by Akka Persistence
-  type PEId = String
-  type ShardedInstanceId = String
-
-  // MACHINERY - Should be handled by Play
+  // - - - - - Machinery - - - - -
+  // Should be handled by Play
   import akka.actor.typed.scaladsl.adapter._
   private val typedSystem: akka.actor.typed.ActorSystem[_] = actorSystem.toTyped
   protected val sharding = ClusterSharding(typedSystem)
   private val cluster: Cluster = Cluster(actorSystem)
   cluster.join(cluster.selfAddress)
 
-  protected def journalName: String
+  // - - - - - Abstract details - - - - -
+  // Abstract details: sharding
   protected def shardingName: String
+  protected def adaptFromSharding: EntityContext => PersistenceId
 
-  protected def adaptToSharding: PEId => ShardedInstanceId
-  protected def adaptFromSharding: ShardedInstanceId => PEId
+  // Abstract details: persistence
+  protected def journalName: String
   protected def createPersistentBehavior
-    : PEId => EventSourcedBehavior[Cmd, Evt, St]
+    : PersistenceId => EventSourcedBehavior[Cmd, Evt, St]
 
-  // this code helps adapt sharding types to Persistence Types
-  def shardedRefFor(persistentEntityId: PEId): EntityRef[Cmd] =
-    sharding.entityRefFor(
-      shardingTypeKey,
-      // prepares a plain persistenceId into a entityId  -- needs some more work
-      adaptToSharding(persistentEntityId)
-    )
+  // Abstract details: tagging
+  protected def taggerPrefix: String
+  protected def byEntityTagger: PersistenceId => String
 
-  protected val shardingTypeKey: EntityTypeKey[Cmd] =
+  // - - - - - Public API - - - - -
+  final def shardedRefFor(persistentEntityId: String): EntityRef[Cmd] =
+    sharding.entityRefFor(shardingTypeKey, persistentEntityId)
+
+  // - - - - - Private details - - - - -
+  private val shardingTypeKey: EntityTypeKey[Cmd] =
     EntityTypeKey[Cmd](shardingName)
 
-  protected type CreateShardedBehavior =
-    EntityContext => EventSourcedBehavior[Cmd, Evt, St]
-  private val createBehavior: CreateShardedBehavior = entityCtx => {
-    val shardedEntityId: ShardedInstanceId = entityCtx.entityId
-    val id: PEId = adaptFromSharding(shardedEntityId)
+  // This helps hide the fact that the Behavior is sharded
+  private val createBehavior
+    : EntityContext => EventSourcedBehavior[Cmd, Evt, St] = entityCtx => {
+    val id = adaptFromSharding(entityCtx)
     createPersistentBehavior(id)
   }
 
@@ -120,41 +122,33 @@ abstract class PlayPersistenceProvisions[Cmd: ClassTag, Evt, St](
 }
 @Singleton
 class PersistenceProvisions @Inject()(actorSystem: ActorSystem)(
-  implicit executionContext: ExecutionContext
+    implicit executionContext: ExecutionContext
 ) extends PlayPersistenceProvisions[
       GreetingsCommand,
       GreetingsChanged,
       GreetingsState
     ](actorSystem) {
 
+  // sharding concerns
+  protected lazy val shardingName = "greetings"
+  protected lazy val adaptFromSharding: EntityContext => PersistenceId =
+    ctx => PersistenceIds.asLagomScala(journalName, ctx.entityId)
+
+  // persistence concerns
   protected lazy val journalName = "greetings"
-  protected lazy val shardingName = "greetings-sharded-entity"
-
-  private val pe = new GreetingsPersistentEntity(journalName)
-
-  // The user-provided PEId is used as a sharding Id. This sharding Id is
-  lazy val adaptToSharding: PEId => ShardedInstanceId = pe.serializeArguments
-  lazy val adaptFromSharding: ShardedInstanceId => PEId =
-    pe.deserializeArguments
-
-  private val byEntityTagger: PEId => String =
-    lagomProjectionsTagger(journalName, 8)
-
   protected val createPersistentBehavior
-    : PEId => EventSourcedBehavior[GreetingsCommand,
-                                   GreetingsChanged,
-                                   GreetingsState] = { peid: PEId =>
-    pe.behavior(pe.persistenceIdFrom(peid))
-      .withTagger(event => Set.empty[String] + byEntityTagger(peid))
+    : PersistenceId => EventSourcedBehavior[GreetingsCommand,
+                                            GreetingsChanged,
+                                            GreetingsState] = {
+    peid: PersistenceId =>
+      GreetingsPersistentEntity
+        .behavior(peid)
+        .withTagger(event => Set.empty[String] + byEntityTagger(peid))
   }
 
-  // A Tagger that given a PEId produces a sharded tag. This is necessary to
-  // build projections over this journal
-  private def lagomProjectionsTagger(journalName: String,
-                                     numOfShards: Int): PEId => String = {
-    persistenceId =>
-      val shardNum = Math.abs(persistenceId.hashCode % numOfShards)
-      s"$journalName$shardNum"
-  }
+  // tagging concerns
+  protected lazy val taggerPrefix = "greetings"
+  protected lazy val byEntityTagger: PersistenceId => String =
+    ProjectionTaggers.lagomProjectionsTagger(taggerPrefix, 8)
 
 }

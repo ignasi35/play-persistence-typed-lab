@@ -1,11 +1,8 @@
-package persistence.akkalibs
+package libs
 
 import akka.persistence.typed.PersistenceId
 
-/**
- * 
- */
-// Could be moved to Akka
+// Utilities to build PersistenceIds
 object PersistenceIds {
   def asLagomScala(namespace: String,
                    persistenEntityId: String): PersistenceId =
@@ -18,4 +15,19 @@ object PersistenceIds {
              separator: String,
              persistenEntityId: String): PersistenceId =
     PersistenceId(s"$namespace$separator$persistenEntityId")
+}
+
+// Utilities for tagging
+object ProjectionTaggers {
+
+  // A Tagger that given a PEId produces a sharded tag. This is necessary to
+  // build projections over this journal
+  final def lagomProjectionsTagger(
+      taggerPrefix: String,
+      numOfTagShards: Int
+  ): PersistenceId => String = { persistenceId =>
+    val shardNum = Math.abs(persistenceId.id.hashCode % numOfTagShards)
+    s"$taggerPrefix$shardNum"
+  }
+
 }
