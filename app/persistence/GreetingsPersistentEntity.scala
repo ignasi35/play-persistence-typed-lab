@@ -1,27 +1,23 @@
 package persistence
 
 import akka.actor.typed.ActorRef
-import akka.cluster.sharding.typed.scaladsl.EntityContext
 import akka.persistence.typed.ExpectingReply
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.scaladsl.Effect
 import akka.persistence.typed.scaladsl.EventSourcedBehavior
 import akka.persistence.typed.scaladsl.ReplyEffect
+import persistence.akkalibs.PersistenceIds
 
 class GreetingsPersistentEntity(val journalName: String) {
 
-  // -- needs some more work
-  // Here's some random de/ser logic so journalName and persistenceId travel together as identifiers when sharding
   def serializeArguments(persistenceId: String):String = s"shard-name-$journalName-$persistenceId"
-  // the journalName is ignored when deserializing but it could be used. What's important is that this de/ser logic
-  // allows passing any info across the entity context.
   def deserializeArguments(entityId: String):String = entityId.split("-").drop(3).mkString("-")
-  // -- needs some more work
 
-  // these are sharding agnostic
+  // this is sharding agnostic
   def persistenceIdFrom(persistentEntityId: String): PersistenceId =
     PersistenceIds.asLagomScala(journalName, persistentEntityId)
 
+  // this is sharding agnostic
   def behavior(persistentId: PersistenceId): EventSourcedBehavior[GreetingsCommand,
                                                            GreetingsChanged,
                                                            GreetingsState] = {
@@ -35,37 +31,7 @@ class GreetingsPersistentEntity(val journalName: String) {
   }
 }
 
-// Only added here for historical reasons. This was the starting point. This implementation is no longer useful.
-object GreetingsPersistentEntity1 {
 
-  def shardedBehavior(
-    entityContext: EntityContext
-  ): EventSourcedBehavior[GreetingsCommand, GreetingsChanged, GreetingsState] =
-    // Note that `entityContext.entityId` is the sharding entity id (which happens to be "prefix|id")
-    EventSourcedBehavior.withEnforcedReplies(
-      persistenceId = PersistenceId(entityContext.entityId),
-      emptyState = GreetingsState.empty,
-      commandHandler =
-        (state, command) => GreetingsState.applyCommand(state, command),
-      eventHandler = (state, evt) => GreetingsState.applyEvent(state, evt)
-    )
-
-}
-
-// Could be moved to Akka
-object PersistenceIds {
-  def asLagomScala(namespace: String,
-                   persistenEntityId: String): PersistenceId =
-    custom(namespace, "|", persistenEntityId)
-
-  def asLagomJava(namespace: String, persistenEntityId: String): PersistenceId =
-    custom(namespace, "", persistenEntityId)
-
-  def custom(namespace: String,
-             separator: String,
-             persistenEntityId: String): PersistenceId =
-    PersistenceId(s"$namespace$separator$persistenEntityId")
-}
 
 final object GreetingsState {
   val empty = GreetingsState("Hello, ")
